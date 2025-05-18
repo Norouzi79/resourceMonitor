@@ -94,12 +94,51 @@ public class IsolatedResourceMonitor {
 
     public static void main(String[] args) throws Exception {
         testSingleThreadedProcess();
+        CompletableFuture.runAsync(() -> {
+            try {
+                test();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        });
         testMultiThreadedProcess();
+        CompletableFuture.runAsync(() -> {
+            try {
+                test();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        });
         testWithUnrelatedThreads();
+        CompletableFuture.runAsync(() -> {
+            try {
+                test();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private static void test() throws InterruptedException, ExecutionException {
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < 4; i++) {
+            futures.add(pool.submit(() -> {
+                List<byte[]> data = new ArrayList<>();
+                for (int j = 0; j < 250; j++) {
+                    data.add(new byte[1024]);
+                    busyWork(25_000);
+                }
+            }));
+        }
+
+        for (Future<?> f : futures) f.get();
+        pool.shutdown();
     }
 
     private static void testSingleThreadedProcess() throws InterruptedException {
-        ResourceMonitor monitor = new ResourceMonitor("SingleThreadTest");
+        IsolatedResourceMonitor monitor = new IsolatedResourceMonitor("SingleThreadTest");
         monitor.start();
 
         // Simulate CPU and memory work
@@ -113,7 +152,7 @@ public class IsolatedResourceMonitor {
     }
 
     private static void testMultiThreadedProcess() throws InterruptedException, ExecutionException {
-        ResourceMonitor monitor = new ResourceMonitor("MultiThreadTest");
+        IsolatedResourceMonitor monitor = new IsolatedResourceMonitor("MultiThreadTest");
         monitor.start();
 
         ExecutorService pool = Executors.newFixedThreadPool(4);
@@ -144,7 +183,7 @@ public class IsolatedResourceMonitor {
             }
         });
 
-        ResourceMonitor monitor = new ResourceMonitor("WithUnrelatedThreadsTest");
+        IsolatedResourceMonitor monitor = new IsolatedResourceMonitor("WithUnrelatedThreadsTest");
         monitor.start();
 
         // Simulate actual work
